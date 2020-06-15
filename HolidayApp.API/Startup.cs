@@ -33,17 +33,30 @@ namespace HolidayApp.API
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            IdentityBuilder builder = services.AddIdentityCore<User>(opt =>{
-                opt.Password.RequireDigit = false;
-                opt.Password.RequiredLength = 4;
-                opt.Password.RequireNonAlphanumeric = false;
-                opt.Password.RequireUppercase = false;
-            }); 
-            builder = new IdentityBuilder(builder.UserType,typeof(Role),builder.Services);
-            builder.AddEntityFrameworkStores<DataContext>();
-            builder.AddRoleValidator<RoleValidator<Role>>();
-            builder.AddRoleManager<RoleManager<Role>>();
-            builder.AddSignInManager<SignInManager<User>>();
+            // IdentityBuilder builder = services.AddIdentityCore<User>(opt =>{
+            //     opt.Password.RequireDigit = false;
+            //     opt.Password.RequiredLength = 4;
+            //     opt.Password.RequireNonAlphanumeric = false;
+            //     opt.Password.RequireUppercase = false;
+            // }); 
+            // builder = new IdentityBuilder(builder.UserType,typeof(Role),builder.Services);
+            // builder.AddEntityFrameworkStores<DataContext>();
+            // builder.AddRoleValidator<RoleValidator<Role>>();
+            // builder.AddRoleManager<RoleManager<Role>>();
+            // builder.AddSignInManager<SignInManager<User>>();
+
+            //Add ASP.NET Identity support
+            services.AddIdentity<User, Role>(
+            opts =>
+            {
+                opts.Password.RequireDigit = false;
+                opts.Password.RequireLowercase = false;
+                opts.Password.RequireUppercase = false;
+                opts.Password.RequireNonAlphanumeric = false;
+                opts.Password.RequiredLength = 4;
+            })
+            .AddRoles<Role>()
+            .AddEntityFrameworkStores<DataContext>();
 
             //Jwt authentication
             services.AddAuthentication(opts =>
@@ -93,12 +106,14 @@ namespace HolidayApp.API
             app.ApplicationServices.GetRequiredService<IServiceScopeFactory>().CreateScope())
             {
                 var dbContext = serviceScope.ServiceProvider.GetService<DataContext>();
-                // var roleManager = serviceScope.ServiceProvider.GetService<RoleManager<IdentityRole>>();
+                var roleManager = serviceScope.ServiceProvider.GetService<RoleManager<Role>>();
                 var userManager = serviceScope.ServiceProvider.GetService<UserManager<User>>();
                 // Create the Db if it doesn't exist and applies any pending migration.
                 dbContext.Database.Migrate();
                 // Seed the Db.
-                Seed.SeedUsers(userManager);
+                Seed.SeedUsersAsync(dbContext,userManager,roleManager).
+                        GetAwaiter()
+                        .GetResult();
             }
 
             if (env.IsDevelopment())
@@ -109,7 +124,8 @@ namespace HolidayApp.API
             //app.UseHttpsRedirection();
             app.UseCors(x => x.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
             app.UseRouting();
-
+            
+            app.UseAuthentication();
             app.UseAuthorization();
 
             app.UseEndpoints(endpoints =>

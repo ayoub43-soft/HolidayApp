@@ -11,20 +11,25 @@ using System.Threading.Tasks;
 using HolidayApp.API.Dtos;
 using HolidayApp.API.Data;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
+using System.Collections.Generic;
 
 namespace HolidayApp.API.Controllers
 {
     [Route("api/auth")]
-    public class AuthController : Controller
+    [ApiController]
+    public class AuthController : ControllerBase
     {
+        private readonly ILogger<AuthController> _logger;
         private IConfiguration Configuration { get; set; }
         private readonly IMapper _mapper;
         private readonly UserManager<User> userManager;
         private readonly SignInManager<User> signInManager;
 
         public AuthController(IConfiguration config, IMapper mapper, UserManager<User> userManager,
-        SignInManager<User> signInManager)
+        SignInManager<User> signInManager, ILogger<AuthController> logger)
         {
+            _logger = logger;
             _mapper = mapper;
             this.userManager = userManager;
             this.signInManager = signInManager;
@@ -35,9 +40,10 @@ namespace HolidayApp.API.Controllers
         public async Task<IActionResult> Register(UserForRegisterDto userForRegisterDto)
         {
             var userToCreate = _mapper.Map<User>(userForRegisterDto);
-            var result = await userManager.CreateAsync(userToCreate,userForRegisterDto.Password);
+            var result = await userManager.CreateAsync(userToCreate, userForRegisterDto.Password);
             //var userToReturn = _mapper.Map<UserForDetailedDto>(userToCreate);
-            if(result.Succeeded){
+            if (result.Succeeded)
+            {
                 return Ok(result);
                 //return CreatedAtRoute("GetUser", new {controller = "Users", id = userToCreate.Id}, userToReturn);
             }
@@ -68,18 +74,23 @@ namespace HolidayApp.API.Controllers
             }
         }
 
-        private string GenerateJwtToken(User user)
+        private async Task<string> GenerateJwtToken(User user)
         {
-            var claims = new[]
+            
+            var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
                 new Claim(ClaimTypes.Name, user.UserName)
             };
+            var roles = await userManager.GetRolesAsync(user);
+            foreach(var role in roles){
+                claims.Add(new Claim(ClaimTypes.Role,role));
+            }
 
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(Configuration["Auth:Jwt:Secret"]));
 
 
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha512Signature);
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256Signature);
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
